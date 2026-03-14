@@ -5,6 +5,7 @@ using DoctorScheduling.Models.Domain.Enums;
 using DoctorScheduling.Models.DTOs.Events;
 using DoctorScheduling.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DoctorScheduling.Services;
 
@@ -12,11 +13,13 @@ public class EventService : IEventService
 {
     private readonly AppDbContext _db;
     private readonly INotificationService _notifications;
+    private readonly ILogger<EventService> _logger;
 
-    public EventService(AppDbContext db, INotificationService notifications)
+    public EventService(AppDbContext db, INotificationService notifications, ILogger<EventService> logger)
     {
         _db = db;
         _notifications = notifications;
+        _logger = logger;
     }
 
     public async Task<Result<EventResponse>> CreateAsync(CreateEventRequest request)
@@ -24,9 +27,15 @@ public class EventService : IEventService
         // Validate doctor exists and is active
         var doctor = await _db.Doctors.FindAsync(request.DoctorId);
         if (doctor is null)
+        {
+            _logger.LogWarning("Event creation failed — doctor {DoctorId} not found", request.DoctorId);
             return Result<EventResponse>.NotFound("Doctor not found.");
+        }
         if (!doctor.IsActive)
+        {
+            _logger.LogWarning("Event creation failed — doctor {DoctorId} ({DoctorName}) is deactivated", doctor.Id, doctor.FullName);
             return Result<EventResponse>.Failure("Cannot create events for a deactivated doctor.");
+        }
 
         var calendarEvent = new Event
         {
@@ -48,8 +57,11 @@ public class EventService : IEventService
             e.EndTime > calendarEvent.StartTime);
 
         if (hasConflict)
+        {
+            _logger.LogWarning("Event creation failed — doctor {DoctorName} has a scheduling conflict at {StartTime}", doctor.FullName, request.StartTime);
             return Result<EventResponse>.ConflictFailure(
                 $"Doctor {doctor.FullName} already has an appointment during this time slot.");
+        }
 
         if (request.Attendees != null)
         {
@@ -73,6 +85,8 @@ public class EventService : IEventService
             .FirstAsync(e => e.Id == calendarEvent.Id);
 
         await _notifications.NotifyEventCreatedAsync(created);
+
+        _logger.LogInformation("Event {EventId} created: \"{Title}\" for doctor {DoctorName} at {StartTime}", created.Id, created.Title, doctor.FullName, created.StartTime);
 
         return Result<EventResponse>.Success(EventResponse.FromEntity(created));
     }
@@ -101,8 +115,11 @@ public class EventService : IEventService
             return Result<EventResponse>.Failure("Cannot update a cancelled event.");
 
         if (expectedVersion.HasValue && calendarEvent.RowVersion != expectedVersion.Value)
+        {
+            _logger.LogWarning("Concurrency conflict on event {EventId} — expected version {Expected}, actual {Actual}", id, expectedVersion.Value, calendarEvent.RowVersion);
             return Result<EventResponse>.ConflictFailure(
                 "The event has been modified by another user. Please refresh and try again.");
+        }
 
         calendarEvent.Title = request.Title;
         calendarEvent.Description = request.Description;
@@ -118,11 +135,14 @@ public class EventService : IEventService
         }
         catch (DbUpdateConcurrencyException)
         {
+            _logger.LogWarning("Concurrency conflict on event {EventId} during save", id);
             return Result<EventResponse>.ConflictFailure(
                 "The event has been modified by another user. Please refresh and try again.");
         }
 
         await _notifications.NotifyEventUpdatedAsync(calendarEvent);
+
+        _logger.LogInformation("Event {EventId} updated: \"{Title}\"", id, calendarEvent.Title);
 
         return Result<EventResponse>.Success(EventResponse.FromEntity(calendarEvent));
     }
@@ -145,6 +165,8 @@ public class EventService : IEventService
 
         await _notifications.NotifyEventCancelledAsync(calendarEvent);
 
+        _logger.LogInformation("Event {EventId} cancelled: \"{Title}\", reason: {Reason}", id, calendarEvent.Title, reason ?? "none");
+
         return Result<EventResponse>.Success(EventResponse.FromEntity(calendarEvent));
     }
 
@@ -157,6 +179,8 @@ public class EventService : IEventService
 
         _db.Events.Remove(calendarEvent);
         await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Event {EventId} permanently deleted", id);
 
         return Result<bool>.Success(true);
     }
@@ -214,6 +238,8 @@ public class EventService : IEventService
         attendee.Status = status;
         await _db.SaveChangesAsync();
 
+        _logger.LogInformation("Attendee {AttendeeId} ({Email}) responded {Status} to event {EventId}", attendeeId, attendee.Email, status, eventId);
+
         return Result<AttendeeResponse>.Success(AttendeeResponse.FromEntity(attendee));
     }
 
@@ -250,6 +276,8 @@ public class EventService : IEventService
 
         await _notifications.SendInvitationAsync(calendarEvent, attendee);
 
+        _logger.LogInformation("Attendee {AttendeeId} ({Email}) added to event {EventId}", attendee.Id, attendee.Email, eventId);
+
         return Result<AttendeeResponse>.Success(AttendeeResponse.FromEntity(attendee));
     }
 
@@ -263,6 +291,8 @@ public class EventService : IEventService
 
         _db.Attendees.Remove(attendee);
         await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Attendee {AttendeeId} ({Email}) removed from event {EventId}", attendeeId, attendee.Email, eventId);
 
         return Result<bool>.Success(true);
     }

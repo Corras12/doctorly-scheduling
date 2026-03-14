@@ -82,6 +82,15 @@ Events carry a `RowVersion` concurrency token. The API flow:
 
 This prevents silent data loss from concurrent edits without pessimistic locking.
 
+### Structured Logging
+The API uses **Serilog** for structured logging with two sinks:
+- **Console** — coloured, structured output for development
+- **Rolling file** — daily log files in `logs/` with 7-day retention
+
+All services log key operations (create, update, delete, cancel) and warnings (conflicts, not found, duplicate emails). HTTP request logging is handled by Serilog's `UseSerilogRequestLogging()` middleware, which logs method, path, status code, and duration for every request.
+
+Noisy framework logs (ASP.NET Core internals, EF Core SQL) are suppressed to `Warning` level to keep logs focused on application behaviour.
+
 ### Notification System
 `INotificationService` is an abstraction that decouples event logic from delivery:
 - **Production**: SendGrid sends real emails with `.ics` calendar attachments

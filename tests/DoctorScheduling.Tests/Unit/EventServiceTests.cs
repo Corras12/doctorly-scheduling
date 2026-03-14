@@ -6,6 +6,7 @@ using DoctorScheduling.Services;
 using DoctorScheduling.Tests.Helpers;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DoctorScheduling.Tests.Unit;
 
@@ -24,7 +25,7 @@ public class EventServiceTests : IDisposable
 
         _db = new AppDbContext(options);
         _notifications = new StubNotificationService();
-        _service = new EventService(_db, _notifications);
+        _service = new EventService(_db, _notifications, NullLogger<EventService>.Instance);
 
         // Seed a doctor for all event tests
         _doctorId = Guid.NewGuid();

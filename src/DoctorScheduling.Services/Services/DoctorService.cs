@@ -4,16 +4,19 @@ using DoctorScheduling.Models.Domain.Entities;
 using DoctorScheduling.Models.DTOs.Doctors;
 using DoctorScheduling.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DoctorScheduling.Services;
 
 public class DoctorService : IDoctorService
 {
     private readonly AppDbContext _db;
+    private readonly ILogger<DoctorService> _logger;
 
-    public DoctorService(AppDbContext db)
+    public DoctorService(AppDbContext db, ILogger<DoctorService> logger)
     {
         _db = db;
+        _logger = logger;
     }
 
     public async Task<Result<DoctorResponse>> CreateAsync(CreateDoctorRequest request)
@@ -22,8 +25,11 @@ public class DoctorService : IDoctorService
             .AnyAsync(d => d.Email.ToLower() == request.Email.ToLower());
 
         if (emailExists)
+        {
+            _logger.LogWarning("Doctor creation failed — duplicate email {Email}", request.Email);
             return Result<DoctorResponse>.ConflictFailure(
                 $"A doctor with email '{request.Email}' already exists.");
+        }
 
         var doctor = new Doctor
         {
@@ -35,6 +41,8 @@ public class DoctorService : IDoctorService
 
         _db.Doctors.Add(doctor);
         await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Doctor {DoctorId} created: {DoctorName} ({Email})", doctor.Id, doctor.FullName, doctor.Email);
 
         return Result<DoctorResponse>.Success(DoctorResponse.FromEntity(doctor));
     }
@@ -56,8 +64,11 @@ public class DoctorService : IDoctorService
             .AnyAsync(d => d.Id != id && d.Email.ToLower() == request.Email.ToLower());
 
         if (emailExists)
+        {
+            _logger.LogWarning("Doctor update failed — duplicate email {Email} for doctor {DoctorId}", request.Email, id);
             return Result<DoctorResponse>.ConflictFailure(
                 $"A doctor with email '{request.Email}' already exists.");
+        }
 
         doctor.FirstName = request.FirstName;
         doctor.LastName = request.LastName;
@@ -65,6 +76,8 @@ public class DoctorService : IDoctorService
         doctor.Specialisation = request.Specialisation;
 
         await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Doctor {DoctorId} updated: {DoctorName}", id, doctor.FullName);
 
         return Result<DoctorResponse>.Success(DoctorResponse.FromEntity(doctor));
     }
@@ -81,6 +94,8 @@ public class DoctorService : IDoctorService
 
         doctor.IsActive = false;
         await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Doctor {DoctorId} deactivated: {DoctorName}", id, doctor.FullName);
 
         return Result<bool>.Success(true);
     }

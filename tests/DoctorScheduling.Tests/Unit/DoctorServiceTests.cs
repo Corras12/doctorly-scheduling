@@ -3,6 +3,7 @@ using DoctorScheduling.Models.DTOs.Doctors;
 using DoctorScheduling.Services;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DoctorScheduling.Tests.Unit;
 
@@ -18,7 +19,7 @@ public class DoctorServiceTests : IDisposable
             .Options;
 
         _db = new AppDbContext(options);
-        _service = new DoctorService(_db);
+        _service = new DoctorService(_db, NullLogger<DoctorService>.Instance);
     }
 
     public void Dispose() => _db.Dispose();

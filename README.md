@@ -165,26 +165,45 @@ nswag openapi2csclient /input:https://localhost:7287/swagger/v1/swagger.json /ou
 
 ## Assumptions
 1. All times are treated as UTC
-2. Events use fixed duration types — Standard (15 min) for routine GP consultations and Extended (30 min) for complex cases
-3. Each event belongs to a single doctor; the system prevents double-booking the same doctor
-4. Doctors are soft-deleted (deactivated) rather than hard-deleted to preserve event history
-5. Attendees are identified by email address (unique per event)
-6. Cancelling an event notifies all attendees but preserves the record
-7. Deleting an event permanently removes it and all attendees
-8. No authentication/authorization is implemented (see Deferred Features)
+2. Events use fixed duration types — Standard (15 min) for routine GP consultations and Extended (30 min) for complex cases. EndTime is auto-calculated from StartTime + DurationType
+3. Each event belongs to a single doctor; the system prevents double-booking the same doctor for overlapping time slots
+4. Doctors are soft-deleted (deactivated) rather than hard-deleted to preserve event history. Deactivated doctors cannot have new events created
+5. Attendees are identified by email address (unique per event, but the same person can attend multiple events)
+6. New attendees default to Pending status; they can Accept, Decline, or mark Tentative but cannot revert to Pending
+7. Cancelled events are immutable — they cannot be updated, have attendees added, or receive RSVP responses
+8. Cancelling an event notifies all attendees but preserves the record
+9. Deleting an event permanently removes it and all associated attendees (cascade delete)
+10. Optimistic concurrency is enforced via ETag/If-Match headers — stale updates return a user-friendly conflict message
+11. Notifications are logged to console by default; real email delivery via SendGrid is opt-in via configuration
+12. No authentication/authorization is implemented (see Deferred Features)
+
+## Implemented Features
+- **Doctor Management** — Full CRUD with soft-delete (deactivate), duplicate email prevention, and search/filter
+- **Event Scheduling** — Create, update, cancel, and delete calendar events with automatic end-time calculation from duration type
+- **Doctor Availability** — Overlap detection prevents double-booking the same doctor for conflicting time slots
+- **Attendee Management** — Add/remove attendees per event, RSVP responses (Accept, Decline, Tentative), duplicate email prevention per event
+- **Optimistic Concurrency** — ETag/If-Match headers on events to prevent lost updates in multi-user scenarios
+- **Notification System** — iCal (.ics) generation with VCALENDAR/VEVENT and ATTENDEE entries; real email delivery via SendGrid (opt-in)
+- **Structured Logging** — Serilog with console + rolling daily file output; HTTP request logging middleware; operation-level tracing in services
+- **Global Error Handling** — RFC 9457 ProblemDetails responses for unhandled exceptions
+- **API Documentation** — Swagger/OpenAPI with XML doc comments, descriptive parameter names, and interactive testing UI
+- **Seed Data** — Pre-loaded doctors, events, and attendees for immediate Swagger exploration
 
 ## Deferred Features
 Given more time, the following would be prioritised:
 - **Authentication/Authorization** — JWT bearer tokens with role-based policies
 - **Recurring Events** — iCal RRULE field with expansion service
 - **Pagination** — Cursor-based pagination on list endpoints
-- **Audit Logging** — EF Core interceptors for change history
+- **Audit Trail** — EF Core interceptors for tracking who changed what and when (change history)
 - **Attendee Availability** — Cross-referencing attendee schedules for conflict detection
 - **Doctor Schedule Management** — Configurable working hours and availability windows per doctor
+- **Health Checks** — `/health` endpoint with database connectivity and dependency status
+- **Rate Limiting** — ASP.NET Core rate limiting middleware to protect against abuse
 
 ## Tech Stack
 - .NET 10 / ASP.NET Core
 - Entity Framework Core 10 with PostgreSQL (Npgsql)
+- Serilog for structured logging (console + rolling file)
 - Swagger / Swashbuckle with XML documentation
 - xUnit + FluentAssertions + EF Core InMemory
 
@@ -194,6 +213,8 @@ Given more time, the following would be prioritised:
 |---------|---------|---------|---------|
 | **Npgsql.EntityFrameworkCore.PostgreSQL** | 10.0.1 | PostgreSQL database provider for Entity Framework Core | Data, Api |
 | **Microsoft.EntityFrameworkCore.Design** | 10.0.5 | EF Core tooling for migrations (`dotnet ef`) | Data, Api |
+| **Serilog.AspNetCore** | 10.0.0 | Structured logging with console output and HTTP request logging | Api |
+| **Serilog.Sinks.File** | 7.0.0 | Rolling daily log file output (`logs/` folder) | Api |
 | **Swashbuckle.AspNetCore** | 10.1.5 | OpenAPI/Swagger documentation and interactive UI | Api |
 | **SendGrid** | 9.29.3 | Email delivery service for sending notifications with iCal attachments | Services |
 | **Microsoft.Extensions.Logging.Abstractions** | 10.0.5 | Logging interface for the service layer (no direct framework dependency) | Services |
