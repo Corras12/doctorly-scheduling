@@ -5,6 +5,7 @@ namespace DoctorScheduling.Models.Domain.Entities;
 public class Event
 {
     public Guid Id { get; set; }
+    public Guid DoctorId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public EventDurationType DurationType { get; set; } = EventDurationType.Standard;
@@ -17,6 +18,7 @@ public class Event
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
+    public Doctor Doctor { get; set; } = null!;
     public ICollection<Attendee> Attendees { get; set; } = new List<Attendee>();
 
     /// <summary>

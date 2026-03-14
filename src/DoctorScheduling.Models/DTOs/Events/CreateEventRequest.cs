@@ -5,6 +5,12 @@ namespace DoctorScheduling.Models.DTOs.Events;
 
 public class CreateEventRequest
 {
+    /// <summary>
+    /// The doctor this event/appointment is assigned to.
+    /// </summary>
+    [Required]
+    public Guid DoctorId { get; set; }
+
     [Required, StringLength(200)]
     public string Title { get; set; } = string.Empty;
 

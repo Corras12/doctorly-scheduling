@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DoctorScheduling.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260314093616_AddEventDurationType")]
-    partial class AddEventDurationType
+    [Migration("20260314101816_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -66,18 +66,18 @@ namespace DoctorScheduling.Data.Migrations
                         {
                             Id = new Guid("11111111-1111-1111-1111-111111111111"),
                             CreatedAt = new DateTime(2026, 3, 1, 8, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "s.mitchell@practice.nhs.uk",
+                            Email = "j.okafor@practice.nhs.uk",
                             EventId = new Guid("a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
-                            Name = "Dr Sarah Mitchell",
+                            Name = "Nurse James Okafor",
                             Status = 1
                         },
                         new
                         {
                             Id = new Guid("22222222-2222-2222-2222-222222222222"),
                             CreatedAt = new DateTime(2026, 3, 1, 8, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "j.okafor@practice.nhs.uk",
+                            Email = "l.chen@practice.nhs.uk",
                             EventId = new Guid("a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
-                            Name = "Nurse James Okafor",
+                            Name = "Reception Manager Lisa Chen",
                             Status = 1
                         },
                         new
@@ -93,9 +93,9 @@ namespace DoctorScheduling.Data.Migrations
                         {
                             Id = new Guid("44444444-4444-4444-4444-444444444444"),
                             CreatedAt = new DateTime(2026, 3, 1, 8, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "p.sharma@practice.nhs.uk",
+                            Email = "t.ellis@practice.nhs.uk",
                             EventId = new Guid("b2c3d4e5-f6a7-8901-bcde-f12345678901"),
-                            Name = "Dr Priya Sharma",
+                            Name = "Practice Manager Tom Ellis",
                             Status = 2
                         },
                         new
@@ -118,6 +118,81 @@ namespace DoctorScheduling.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("DoctorScheduling.Models.Domain.Entities.Doctor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Specialisation")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("Doctors");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("aaaa1111-bbbb-cccc-dddd-eeee11111111"),
+                            CreatedAt = new DateTime(2026, 1, 15, 8, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "s.mitchell@practice.nhs.uk",
+                            FirstName = "Sarah",
+                            IsActive = true,
+                            LastName = "Mitchell",
+                            Specialisation = "General Practice"
+                        },
+                        new
+                        {
+                            Id = new Guid("aaaa2222-bbbb-cccc-dddd-eeee22222222"),
+                            CreatedAt = new DateTime(2026, 1, 15, 8, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "p.sharma@practice.nhs.uk",
+                            FirstName = "Priya",
+                            IsActive = true,
+                            LastName = "Sharma",
+                            Specialisation = "Paediatrics"
+                        },
+                        new
+                        {
+                            Id = new Guid("aaaa3333-bbbb-cccc-dddd-eeee33333333"),
+                            CreatedAt = new DateTime(2026, 2, 1, 8, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "d.thompson@practice.nhs.uk",
+                            FirstName = "David",
+                            IsActive = true,
+                            LastName = "Thompson",
+                            Specialisation = "Dermatology"
+                        });
+                });
+
             modelBuilder.Entity("DoctorScheduling.Models.Domain.Entities.Event", b =>
                 {
                     b.Property<Guid>("Id")
@@ -135,6 +210,9 @@ namespace DoctorScheduling.Data.Migrations
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("DoctorId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("DurationType")
                         .HasColumnType("integer");
@@ -168,7 +246,7 @@ namespace DoctorScheduling.Data.Migrations
 
                     b.HasIndex("IsCancelled");
 
-                    b.HasIndex("StartTime", "EndTime");
+                    b.HasIndex("DoctorId", "StartTime", "EndTime");
 
                     b.ToTable("Events");
 
@@ -178,6 +256,7 @@ namespace DoctorScheduling.Data.Migrations
                             Id = new Guid("a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
                             CreatedAt = new DateTime(2026, 3, 1, 8, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Daily briefing to review patient schedules, flag complex cases, and coordinate care across the practice.",
+                            DoctorId = new Guid("aaaa1111-bbbb-cccc-dddd-eeee11111111"),
                             DurationType = 0,
                             EndTime = new DateTime(2026, 3, 16, 9, 15, 0, 0, DateTimeKind.Utc),
                             IsCancelled = false,
@@ -191,6 +270,7 @@ namespace DoctorScheduling.Data.Migrations
                             Id = new Guid("b2c3d4e5-f6a7-8901-bcde-f12345678901"),
                             CreatedAt = new DateTime(2026, 3, 1, 8, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Review of clinical audit results, significant events, and practice performance against QOF targets.",
+                            DoctorId = new Guid("aaaa2222-bbbb-cccc-dddd-eeee22222222"),
                             DurationType = 1,
                             EndTime = new DateTime(2026, 3, 17, 14, 30, 0, 0, DateTimeKind.Utc),
                             IsCancelled = false,
@@ -204,6 +284,7 @@ namespace DoctorScheduling.Data.Migrations
                             Id = new Guid("c3d4e5f6-a7b8-9012-cdef-123456789012"),
                             CreatedAt = new DateTime(2026, 3, 1, 8, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Monthly all-staff meeting covering operational updates, policy changes, and flu vaccination clinic planning.",
+                            DoctorId = new Guid("aaaa1111-bbbb-cccc-dddd-eeee11111111"),
                             DurationType = 1,
                             EndTime = new DateTime(2026, 3, 20, 10, 30, 0, 0, DateTimeKind.Utc),
                             IsCancelled = false,
@@ -218,6 +299,7 @@ namespace DoctorScheduling.Data.Migrations
                             CancellationReason = "Vendor delayed system deployment",
                             CreatedAt = new DateTime(2026, 3, 1, 8, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Hands-on training session for the new online patient booking and triage system.",
+                            DoctorId = new Guid("aaaa3333-bbbb-cccc-dddd-eeee33333333"),
                             DurationType = 0,
                             EndTime = new DateTime(2026, 3, 18, 13, 15, 0, 0, DateTimeKind.Utc),
                             IsCancelled = true,
@@ -237,6 +319,22 @@ namespace DoctorScheduling.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Event");
+                });
+
+            modelBuilder.Entity("DoctorScheduling.Models.Domain.Entities.Event", b =>
+                {
+                    b.HasOne("DoctorScheduling.Models.Domain.Entities.Doctor", "Doctor")
+                        .WithMany("Events")
+                        .HasForeignKey("DoctorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Doctor");
+                });
+
+            modelBuilder.Entity("DoctorScheduling.Models.Domain.Entities.Doctor", b =>
+                {
+                    b.Navigation("Events");
                 });
 
             modelBuilder.Entity("DoctorScheduling.Models.Domain.Entities.Event", b =>

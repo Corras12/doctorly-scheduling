@@ -10,6 +10,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
+        services.AddScoped<IDoctorService, DoctorService>();
         services.AddScoped<IEventService, EventService>();
         services.AddScoped<INotificationService, NotificationService>();
         return services;

@@ -10,9 +10,27 @@ The database uses **PostgreSQL** with **Entity Framework Core 10** as the ORM. T
 
 ```
 ┌─────────────────────────────────────┐
+│               Doctors               │
+├─────────────────────────────────────┤
+│ Id              GUID (PK)           │
+│ FirstName       VARCHAR(100) NOT NULL│
+│ LastName        VARCHAR(100) NOT NULL│
+│ Email           VARCHAR(254) NOT NULL│
+│ Specialisation  VARCHAR(200)        │
+│ IsActive        BOOLEAN             │
+│ CreatedAt       TIMESTAMP           │
+│ UpdatedAt       TIMESTAMP           │
+├─────────────────────────────────────┤
+│ IX_Email (unique)                   │
+└──────────────────┬──────────────────┘
+                   │ 1
+                   │
+                   │ *
+┌──────────────────┴──────────────────┐
 │               Events                │
 ├─────────────────────────────────────┤
 │ Id              GUID (PK)           │
+│ DoctorId        GUID (FK) NOT NULL  │
 │ Title           VARCHAR(200) NOT NULL│
 │ Description     VARCHAR(2000)       │
 │ DurationType    INT NOT NULL        │
@@ -25,7 +43,7 @@ The database uses **PostgreSQL** with **Entity Framework Core 10** as the ORM. T
 │ CreatedAt       TIMESTAMP           │
 │ UpdatedAt       TIMESTAMP           │
 ├─────────────────────────────────────┤
-│ IX_StartTime_EndTime (composite)    │
+│ IX_DoctorId_StartTime_EndTime       │
 │ IX_IsCancelled                      │
 └──────────────────┬──────────────────┘
                    │ 1
@@ -50,13 +68,29 @@ The database uses **PostgreSQL** with **Entity Framework Core 10** as the ORM. T
 
 ## Tables
 
-### Events
+### Doctors
 
-The central entity representing a calendar event.
+Practitioners within the practice who own calendar events.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | Id | `uuid` | PK, auto-generated | Unique identifier |
+| FirstName | `varchar(100)` | NOT NULL | Doctor's first name |
+| LastName | `varchar(100)` | NOT NULL | Doctor's surname |
+| Email | `varchar(254)` | NOT NULL, UNIQUE | Email address (RFC 5321 max length) |
+| Specialisation | `varchar(200)` | Nullable | Clinical specialisation (e.g., General Practice, Paediatrics) |
+| IsActive | `boolean` | NOT NULL, Default: true | Soft-delete flag — inactive doctors cannot have new events created |
+| CreatedAt | `timestamp` | Auto-set | Record creation timestamp |
+| UpdatedAt | `timestamp` | Nullable, auto-set | Last modification timestamp |
+
+### Events
+
+The central entity representing a calendar event. Each event belongs to a single doctor.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| Id | `uuid` | PK, auto-generated | Unique identifier |
+| DoctorId | `uuid` | FK → Doctors.Id, NOT NULL | Owning doctor |
 | Title | `varchar(200)` | NOT NULL | Event title |
 | Description | `varchar(2000)` | Nullable | Detailed description |
 | DurationType | `integer` | NOT NULL | Duration type enum (0=Standard 15min, 1=Extended 30min) |
@@ -89,7 +123,8 @@ People invited to an event, with RSVP tracking.
 
 | Table | Index | Columns | Type | Purpose |
 |-------|-------|---------|------|---------|
-| Events | IX_StartTime_EndTime | StartTime, EndTime | Composite | Efficient date range queries and overlap detection |
+| Doctors | IX_Email | Email | Unique | Prevents duplicate doctor registrations |
+| Events | IX_DoctorId_StartTime_EndTime | DoctorId, StartTime, EndTime | Composite | Efficient per-doctor scheduling and overlap detection |
 | Events | IX_IsCancelled | IsCancelled | Single | Fast filtering of active vs cancelled events |
 | Attendees | IX_EventId_Email | EventId, Email | Unique composite | Prevents duplicate attendees per event, supports lookups |
 
@@ -99,6 +134,7 @@ People invited to an event, with RSVP tracking.
 
 | Relationship | Type | Cascade |
 |-------------|------|---------|
+| Doctor → Events | One-to-Many | Restrict (cannot delete a doctor who has events) |
 | Event → Attendees | One-to-Many | Delete (removing an event removes all its attendees) |
 
 ---
@@ -164,12 +200,22 @@ All primary keys use `uuid` with `gen_random_uuid()` as the database default. Th
 
 The migration includes sample data for development and demonstration:
 
-| Event | Duration | Start | Attendees | Status |
-|-------|----------|-------|-----------|--------|
-| Morning Clinical Huddle | Standard (15 min) | 2026-03-16 09:00 | 2 | Active |
-| Quarterly Clinical Governance Review | Extended (30 min) | 2026-03-17 14:00 | 2 | Active |
-| New Patient Portal Training | Standard (15 min) | 2026-03-18 13:00 | 0 | Cancelled |
-| Practice Staff Meeting | Extended (30 min) | 2026-03-20 10:00 | 2 | Active |
+**Doctors:**
+
+| Name | Email | Specialisation |
+|------|-------|---------------|
+| Dr Sarah Mitchell | s.mitchell@practice.nhs.uk | General Practice |
+| Dr Priya Sharma | p.sharma@practice.nhs.uk | Paediatrics |
+| Dr David Thompson | d.thompson@practice.nhs.uk | Dermatology |
+
+**Events:**
+
+| Event | Doctor | Duration | Start | Attendees | Status |
+|-------|--------|----------|-------|-----------|--------|
+| Morning Clinical Huddle | Dr Mitchell | Standard (15 min) | 2026-03-16 09:00 | 2 | Active |
+| Quarterly Clinical Governance Review | Dr Sharma | Extended (30 min) | 2026-03-17 14:00 | 2 | Active |
+| New Patient Portal Training | Dr Thompson | Standard (15 min) | 2026-03-18 13:00 | 0 | Cancelled |
+| Practice Staff Meeting | Dr Mitchell | Extended (30 min) | 2026-03-20 10:00 | 2 | Active |
 
 Seed data uses fixed GUIDs for repeatable migrations.
 

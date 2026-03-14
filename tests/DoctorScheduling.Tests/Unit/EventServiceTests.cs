@@ -14,6 +14,7 @@ public class EventServiceTests : IDisposable
     private readonly AppDbContext _db;
     private readonly EventService _service;
     private readonly StubNotificationService _notifications;
+    private readonly Guid _doctorId;
 
     public EventServiceTests()
     {
@@ -24,12 +25,26 @@ public class EventServiceTests : IDisposable
         _db = new AppDbContext(options);
         _notifications = new StubNotificationService();
         _service = new EventService(_db, _notifications);
+
+        // Seed a doctor for all event tests
+        _doctorId = Guid.NewGuid();
+        _db.Doctors.Add(new Doctor
+        {
+            Id = _doctorId,
+            FirstName = "Test",
+            LastName = "Doctor",
+            Email = "test.doctor@practice.nhs.uk",
+            Specialisation = "General Practice",
+            IsActive = true
+        });
+        _db.SaveChanges();
     }
 
     public void Dispose() => _db.Dispose();
 
-    private static CreateEventRequest ValidRequest(DateTime? start = null) => new()
+    private CreateEventRequest ValidRequest(DateTime? start = null) => new()
     {
+        DoctorId = _doctorId,
         Title = "Test Event",
         Description = "A test event",
         DurationType = EventDurationType.Standard,
@@ -51,6 +66,8 @@ public class EventServiceTests : IDisposable
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Title.Should().Be("Test Event");
+        result.Value.DoctorId.Should().Be(_doctorId);
+        result.Value.DoctorName.Should().Be("Test Doctor");
         result.Value.Attendees.Should().HaveCount(2);
         result.Value.IsCancelled.Should().BeFalse();
     }
@@ -100,6 +117,85 @@ public class EventServiceTests : IDisposable
         await _service.CreateAsync(ValidRequest());
 
         _notifications.SentNotifications.Should().Contain(n => n.StartsWith("Created:"));
+    }
+
+    [Fact]
+    public async Task CreateAsync_NonExistentDoctor_ReturnsNotFound()
+    {
+        var request = ValidRequest();
+        request.DoctorId = Guid.NewGuid();
+
+        var result = await _service.CreateAsync(request);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Type.Should().Be(Models.Domain.ResultType.NotFound);
+        result.Error.Should().Contain("Doctor not found");
+    }
+
+    [Fact]
+    public async Task CreateAsync_DeactivatedDoctor_ReturnsFailure()
+    {
+        var inactiveDoctor = new Doctor
+        {
+            Id = Guid.NewGuid(),
+            FirstName = "Inactive",
+            LastName = "Doctor",
+            Email = "inactive@practice.nhs.uk",
+            IsActive = false
+        };
+        _db.Doctors.Add(inactiveDoctor);
+        await _db.SaveChangesAsync();
+
+        var request = ValidRequest();
+        request.DoctorId = inactiveDoctor.Id;
+
+        var result = await _service.CreateAsync(request);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("deactivated");
+    }
+
+    [Fact]
+    public async Task CreateAsync_OverlappingTimeSlot_ReturnsConflict()
+    {
+        var start = DateTime.UtcNow.AddDays(1).Date.AddHours(10);
+        await _service.CreateAsync(ValidRequest(start));
+
+        // Try to create another event at the same time for the same doctor
+        var request = ValidRequest(start);
+        request.Title = "Overlapping Event";
+
+        var result = await _service.CreateAsync(request);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Type.Should().Be(Models.Domain.ResultType.Conflict);
+        result.Error.Should().Contain("already has an appointment");
+    }
+
+    [Fact]
+    public async Task CreateAsync_DifferentDoctor_SameTimeSlot_Succeeds()
+    {
+        var start = DateTime.UtcNow.AddDays(1).Date.AddHours(10);
+        await _service.CreateAsync(ValidRequest(start));
+
+        // Create a second doctor
+        var doctor2Id = Guid.NewGuid();
+        _db.Doctors.Add(new Doctor
+        {
+            Id = doctor2Id,
+            FirstName = "Other",
+            LastName = "Doctor",
+            Email = "other@practice.nhs.uk",
+            IsActive = true
+        });
+        await _db.SaveChangesAsync();
+
+        var request = ValidRequest(start);
+        request.DoctorId = doctor2Id;
+
+        var result = await _service.CreateAsync(request);
+
+        result.IsSuccess.Should().BeTrue();
     }
 
     // --- GetById ---
@@ -251,12 +347,14 @@ public class EventServiceTests : IDisposable
 
         await _service.CreateAsync(new CreateEventRequest
         {
+            DoctorId = _doctorId,
             Title = "Tomorrow Event",
             DurationType = EventDurationType.Standard,
             StartTime = tomorrow.AddHours(10)
         });
         await _service.CreateAsync(new CreateEventRequest
         {
+            DoctorId = _doctorId,
             Title = "Next Week Event",
             DurationType = EventDurationType.Standard,
             StartTime = nextWeek.AddHours(10)
@@ -273,12 +371,14 @@ public class EventServiceTests : IDisposable
     {
         await _service.CreateAsync(new CreateEventRequest
         {
+            DoctorId = _doctorId,
             Title = "Team Standup",
             DurationType = EventDurationType.Standard,
             StartTime = DateTime.UtcNow.AddDays(1)
         });
         await _service.CreateAsync(new CreateEventRequest
         {
+            DoctorId = _doctorId,
             Title = "Project Review",
             DurationType = EventDurationType.Extended,
             StartTime = DateTime.UtcNow.AddDays(2)
@@ -297,6 +397,7 @@ public class EventServiceTests : IDisposable
         await _service.CancelAsync(created.Value!.Id);
         await _service.CreateAsync(new CreateEventRequest
         {
+            DoctorId = _doctorId,
             Title = "Active Event",
             DurationType = EventDurationType.Standard,
             StartTime = DateTime.UtcNow.AddDays(2)
@@ -315,6 +416,7 @@ public class EventServiceTests : IDisposable
     {
         await _service.CreateAsync(new CreateEventRequest
         {
+            DoctorId = _doctorId,
             Title = "Morning Standup",
             Description = "Daily sync",
             DurationType = EventDurationType.Standard,
@@ -322,6 +424,7 @@ public class EventServiceTests : IDisposable
         });
         await _service.CreateAsync(new CreateEventRequest
         {
+            DoctorId = _doctorId,
             Title = "Design Review",
             Description = "Standup alternative",
             DurationType = EventDurationType.Extended,
@@ -390,6 +493,7 @@ public class EventServiceTests : IDisposable
     {
         var created = await _service.CreateAsync(new CreateEventRequest
         {
+            DoctorId = _doctorId,
             Title = "Test",
             DurationType = EventDurationType.Standard,
             StartTime = DateTime.UtcNow.AddDays(1)
@@ -436,6 +540,7 @@ public class EventServiceTests : IDisposable
     {
         var created = await _service.CreateAsync(new CreateEventRequest
         {
+            DoctorId = _doctorId,
             Title = "Test",
             DurationType = EventDurationType.Standard,
             StartTime = DateTime.UtcNow.AddDays(1)

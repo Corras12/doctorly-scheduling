@@ -5,6 +5,8 @@ namespace DoctorScheduling.Models.DTOs.Events;
 
 public record EventSummaryResponse(
     Guid Id,
+    Guid DoctorId,
+    string DoctorName,
     string Title,
     EventDurationType DurationType,
     int DurationMinutes,
@@ -15,6 +17,8 @@ public record EventSummaryResponse(
 {
     public static EventSummaryResponse FromEntity(Event e) => new(
         e.Id,
+        e.DoctorId,
+        e.Doctor?.FullName ?? "Unknown",
         e.Title,
         e.DurationType,
         e.DurationMinutes,

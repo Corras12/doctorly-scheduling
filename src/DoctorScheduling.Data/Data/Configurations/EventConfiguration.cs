@@ -21,7 +21,7 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
 
         builder.Property(e => e.RowVersion).IsConcurrencyToken();
 
-        builder.HasIndex(e => new { e.StartTime, e.EndTime });
+        builder.HasIndex(e => new { e.DoctorId, e.StartTime, e.EndTime });
         builder.HasIndex(e => e.IsCancelled);
 
         builder.HasMany(e => e.Attendees)

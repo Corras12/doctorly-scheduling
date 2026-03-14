@@ -27,7 +27,7 @@ The Calendar Event Scheduling API follows a **layered architecture** with strict
 ## Layer Responsibilities
 
 ### Models (DoctorScheduling.Models)
-- **Domain entities** (`Event`, `Attendee`) with encapsulated business rules
+- **Domain entities** (`Doctor`, `Event`, `Attendee`) with encapsulated business rules
 - **Enums** (`AttendanceStatus`, `EventDurationType`, `ResultType`)
 - **DTOs** for API request/response contracts with data annotation validation
 - **Result\<T\> pattern** for typed operation outcomes
@@ -41,7 +41,8 @@ This layer has **zero external dependencies** — it is a pure C# class library.
 - **Migrations** managed via EF Core CLI
 
 ### Services (DoctorScheduling.Services)
-- **IEventService** — all business logic for event CRUD, attendee management, and RSVP
+- **IDoctorService** — doctor registration, updates, deactivation, and search
+- **IEventService** — event CRUD, attendee management, RSVP, and doctor availability checking
 - **INotificationService** — email delivery via SendGrid with iCal (.ics) calendar attachments
 - Validation, concurrency conflict handling, and orchestration live here
 - Services depend on abstractions (interfaces) registered via DI

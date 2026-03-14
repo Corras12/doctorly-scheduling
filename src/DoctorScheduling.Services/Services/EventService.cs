@@ -21,8 +21,16 @@ public class EventService : IEventService
 
     public async Task<Result<EventResponse>> CreateAsync(CreateEventRequest request)
     {
+        // Validate doctor exists and is active
+        var doctor = await _db.Doctors.FindAsync(request.DoctorId);
+        if (doctor is null)
+            return Result<EventResponse>.NotFound("Doctor not found.");
+        if (!doctor.IsActive)
+            return Result<EventResponse>.Failure("Cannot create events for a deactivated doctor.");
+
         var calendarEvent = new Event
         {
+            DoctorId = request.DoctorId,
             Title = request.Title,
             Description = request.Description,
             DurationType = request.DurationType,
@@ -31,6 +39,17 @@ public class EventService : IEventService
         };
 
         calendarEvent.CalculateEndTime();
+
+        // Check doctor availability
+        var hasConflict = await _db.Events.AnyAsync(e =>
+            e.DoctorId == request.DoctorId &&
+            !e.IsCancelled &&
+            e.StartTime < calendarEvent.EndTime &&
+            e.EndTime > calendarEvent.StartTime);
+
+        if (hasConflict)
+            return Result<EventResponse>.ConflictFailure(
+                $"Doctor {doctor.FullName} already has an appointment during this time slot.");
 
         if (request.Attendees != null)
         {
@@ -49,6 +68,7 @@ public class EventService : IEventService
         await _db.SaveChangesAsync();
 
         var created = await _db.Events
+            .Include(e => e.Doctor)
             .Include(e => e.Attendees)
             .FirstAsync(e => e.Id == calendarEvent.Id);
 
@@ -60,6 +80,7 @@ public class EventService : IEventService
     public async Task<EventResponse?> GetByIdAsync(Guid id)
     {
         var calendarEvent = await _db.Events
+            .Include(e => e.Doctor)
             .Include(e => e.Attendees)
             .FirstOrDefaultAsync(e => e.Id == id);
 
@@ -69,6 +90,7 @@ public class EventService : IEventService
     public async Task<Result<EventResponse>> UpdateAsync(Guid id, UpdateEventRequest request, uint? expectedVersion = null)
     {
         var calendarEvent = await _db.Events
+            .Include(e => e.Doctor)
             .Include(e => e.Attendees)
             .FirstOrDefaultAsync(e => e.Id == id);
 
@@ -108,6 +130,7 @@ public class EventService : IEventService
     public async Task<Result<EventResponse>> CancelAsync(Guid id, string? reason = null)
     {
         var calendarEvent = await _db.Events
+            .Include(e => e.Doctor)
             .Include(e => e.Attendees)
             .FirstOrDefaultAsync(e => e.Id == id);
 
@@ -141,7 +164,7 @@ public class EventService : IEventService
     public async Task<List<EventSummaryResponse>> ListAsync(
         DateTime? from = null, DateTime? to = null, string? search = null, bool? isCancelled = null)
     {
-        var query = _db.Events.Include(e => e.Attendees).AsQueryable();
+        var query = _db.Events.Include(e => e.Doctor).Include(e => e.Attendees).AsQueryable();
 
         if (from.HasValue)
             query = query.Where(e => e.StartTime >= from.Value);
@@ -197,6 +220,7 @@ public class EventService : IEventService
     public async Task<Result<AttendeeResponse>> AddAttendeeAsync(Guid eventId, AttendeeRequest request)
     {
         var calendarEvent = await _db.Events
+            .Include(e => e.Doctor)
             .Include(e => e.Attendees)
             .FirstOrDefaultAsync(e => e.Id == eventId);
 
