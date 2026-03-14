@@ -1,4 +1,5 @@
 using DoctorScheduling.Models.Domain.Entities;
+using DoctorScheduling.Models.Domain.Enums;
 
 namespace DoctorScheduling.Models.DTOs.Events;
 
@@ -6,6 +7,8 @@ public record EventResponse(
     Guid Id,
     string Title,
     string? Description,
+    EventDurationType DurationType,
+    int DurationMinutes,
     DateTime StartTime,
     DateTime EndTime,
     string? Location,
@@ -20,6 +23,8 @@ public record EventResponse(
         e.Id,
         e.Title,
         e.Description,
+        e.DurationType,
+        e.DurationMinutes,
         e.StartTime,
         e.EndTime,
         e.Location,

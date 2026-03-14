@@ -25,13 +25,12 @@ public class EventService : IEventService
         {
             Title = request.Title,
             Description = request.Description,
+            DurationType = request.DurationType,
             StartTime = request.StartTime,
-            EndTime = request.EndTime,
             Location = request.Location
         };
 
-        if (!calendarEvent.HasValidTimeRange())
-            return Result<EventResponse>.Failure("End time must be after start time.");
+        calendarEvent.CalculateEndTime();
 
         if (request.Attendees != null)
         {
@@ -85,12 +84,11 @@ public class EventService : IEventService
 
         calendarEvent.Title = request.Title;
         calendarEvent.Description = request.Description;
+        calendarEvent.DurationType = request.DurationType;
         calendarEvent.StartTime = request.StartTime;
-        calendarEvent.EndTime = request.EndTime;
         calendarEvent.Location = request.Location;
 
-        if (!calendarEvent.HasValidTimeRange())
-            return Result<EventResponse>.Failure("End time must be after start time.");
+        calendarEvent.CalculateEndTime();
 
         try
         {

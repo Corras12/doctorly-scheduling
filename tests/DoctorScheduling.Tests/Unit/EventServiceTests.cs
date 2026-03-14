@@ -17,7 +17,11 @@ public class EventServiceTests : IDisposable
 
     public EventServiceTests()
     {
-        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        _db = new AppDbContext(options);
         _notifications = new StubNotificationService();
         _service = new EventService(_db, _notifications);
     }
@@ -28,8 +32,8 @@ public class EventServiceTests : IDisposable
     {
         Title = "Test Event",
         Description = "A test event",
+        DurationType = EventDurationType.Standard,
         StartTime = start ?? DateTime.UtcNow.AddDays(1),
-        EndTime = (start ?? DateTime.UtcNow.AddDays(1)).AddHours(1),
         Location = "Room A",
         Attendees =
         [
@@ -52,28 +56,49 @@ public class EventServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task CreateAsync_WithInvalidTimeRange_ReturnsFailure()
+    public async Task CreateAsync_StandardDuration_SetsEndTime15MinutesAfterStart()
     {
-        var request = ValidRequest();
-        request.EndTime = request.StartTime.AddHours(-1);
+        var start = DateTime.UtcNow.AddDays(1);
+        var request = ValidRequest(start);
+        request.DurationType = EventDurationType.Standard;
 
         var result = await _service.CreateAsync(request);
 
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("End time");
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.DurationType.Should().Be(EventDurationType.Standard);
+        result.Value.DurationMinutes.Should().Be(15);
+        result.Value.EndTime.Should().Be(start.AddMinutes(15));
+    }
+
+    [Fact]
+    public async Task CreateAsync_ExtendedDuration_SetsEndTime30MinutesAfterStart()
+    {
+        var start = DateTime.UtcNow.AddDays(1);
+        var request = ValidRequest(start);
+        request.DurationType = EventDurationType.Extended;
+
+        var result = await _service.CreateAsync(request);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.DurationType.Should().Be(EventDurationType.Extended);
+        result.Value.DurationMinutes.Should().Be(30);
+        result.Value.EndTime.Should().Be(start.AddMinutes(30));
     }
 
     [Fact]
     public async Task CreateAsync_WithAttendees_SetsStatusToPending()
     {
         var result = await _service.CreateAsync(ValidRequest());
-        result.Value!.Attendees.Should().AllSatisfy(a => a.Status.Should().Be(AttendanceStatus.Pending));
+
+        result.Value!.Attendees.Should().AllSatisfy(a =>
+            a.Status.Should().Be(AttendanceStatus.Pending));
     }
 
     [Fact]
     public async Task CreateAsync_SendsNotification()
     {
         await _service.CreateAsync(ValidRequest());
+
         _notifications.SentNotifications.Should().Contain(n => n.StartsWith("Created:"));
     }
 
@@ -83,6 +108,7 @@ public class EventServiceTests : IDisposable
     public async Task GetByIdAsync_ExistingEvent_ReturnsEvent()
     {
         var created = await _service.CreateAsync(ValidRequest());
+
         var result = await _service.GetByIdAsync(created.Value!.Id);
 
         result.Should().NotBeNull();
@@ -94,6 +120,7 @@ public class EventServiceTests : IDisposable
     public async Task GetByIdAsync_NonExistent_ReturnsNull()
     {
         var result = await _service.GetByIdAsync(Guid.NewGuid());
+
         result.Should().BeNull();
     }
 
@@ -106,8 +133,8 @@ public class EventServiceTests : IDisposable
         var updateReq = new UpdateEventRequest
         {
             Title = "Updated Title",
+            DurationType = EventDurationType.Extended,
             StartTime = DateTime.UtcNow.AddDays(2),
-            EndTime = DateTime.UtcNow.AddDays(2).AddHours(2),
             Location = "Room B"
         };
 
@@ -116,6 +143,8 @@ public class EventServiceTests : IDisposable
         result.IsSuccess.Should().BeTrue();
         result.Value!.Title.Should().Be("Updated Title");
         result.Value.Location.Should().Be("Room B");
+        result.Value.DurationType.Should().Be(EventDurationType.Extended);
+        result.Value.DurationMinutes.Should().Be(30);
     }
 
     [Fact]
@@ -127,8 +156,8 @@ public class EventServiceTests : IDisposable
         var updateReq = new UpdateEventRequest
         {
             Title = "Updated",
-            StartTime = DateTime.UtcNow.AddDays(1),
-            EndTime = DateTime.UtcNow.AddDays(1).AddHours(1)
+            DurationType = EventDurationType.Standard,
+            StartTime = DateTime.UtcNow.AddDays(1)
         };
 
         var result = await _service.UpdateAsync(created.Value.Id, updateReq);
@@ -143,8 +172,8 @@ public class EventServiceTests : IDisposable
         var updateReq = new UpdateEventRequest
         {
             Title = "Updated",
-            StartTime = DateTime.UtcNow.AddDays(1),
-            EndTime = DateTime.UtcNow.AddDays(1).AddHours(1)
+            DurationType = EventDurationType.Standard,
+            StartTime = DateTime.UtcNow.AddDays(1)
         };
 
         var result = await _service.UpdateAsync(Guid.NewGuid(), updateReq);
@@ -223,14 +252,14 @@ public class EventServiceTests : IDisposable
         await _service.CreateAsync(new CreateEventRequest
         {
             Title = "Tomorrow Event",
-            StartTime = tomorrow.AddHours(10),
-            EndTime = tomorrow.AddHours(11)
+            DurationType = EventDurationType.Standard,
+            StartTime = tomorrow.AddHours(10)
         });
         await _service.CreateAsync(new CreateEventRequest
         {
             Title = "Next Week Event",
-            StartTime = nextWeek.AddHours(10),
-            EndTime = nextWeek.AddHours(11)
+            DurationType = EventDurationType.Standard,
+            StartTime = nextWeek.AddHours(10)
         });
 
         var result = await _service.ListAsync(from: tomorrow, to: tomorrow.AddDays(1));
@@ -245,15 +274,14 @@ public class EventServiceTests : IDisposable
         await _service.CreateAsync(new CreateEventRequest
         {
             Title = "Team Standup",
-            StartTime = DateTime.UtcNow.AddDays(1),
-            EndTime = DateTime.UtcNow.AddDays(1).AddHours(1)
+            DurationType = EventDurationType.Standard,
+            StartTime = DateTime.UtcNow.AddDays(1)
         });
-
         await _service.CreateAsync(new CreateEventRequest
         {
             Title = "Project Review",
-            StartTime = DateTime.UtcNow.AddDays(2),
-            EndTime = DateTime.UtcNow.AddDays(2).AddHours(1)
+            DurationType = EventDurationType.Extended,
+            StartTime = DateTime.UtcNow.AddDays(2)
         });
 
         var result = await _service.ListAsync(search: "standup");
@@ -270,8 +298,8 @@ public class EventServiceTests : IDisposable
         await _service.CreateAsync(new CreateEventRequest
         {
             Title = "Active Event",
-            StartTime = DateTime.UtcNow.AddDays(2),
-            EndTime = DateTime.UtcNow.AddDays(2).AddHours(1)
+            DurationType = EventDurationType.Standard,
+            StartTime = DateTime.UtcNow.AddDays(2)
         });
 
         var activeOnly = await _service.ListAsync(isCancelled: false);
@@ -289,15 +317,15 @@ public class EventServiceTests : IDisposable
         {
             Title = "Morning Standup",
             Description = "Daily sync",
-            StartTime = DateTime.UtcNow.AddDays(1),
-            EndTime = DateTime.UtcNow.AddDays(1).AddHours(1)
+            DurationType = EventDurationType.Standard,
+            StartTime = DateTime.UtcNow.AddDays(1)
         });
         await _service.CreateAsync(new CreateEventRequest
         {
             Title = "Design Review",
             Description = "Standup alternative",
-            StartTime = DateTime.UtcNow.AddDays(2),
-            EndTime = DateTime.UtcNow.AddDays(2).AddHours(1)
+            DurationType = EventDurationType.Extended,
+            StartTime = DateTime.UtcNow.AddDays(2)
         });
 
         var result = await _service.SearchAsync("standup");
@@ -363,8 +391,8 @@ public class EventServiceTests : IDisposable
         var created = await _service.CreateAsync(new CreateEventRequest
         {
             Title = "Test",
-            StartTime = DateTime.UtcNow.AddDays(1),
-            EndTime = DateTime.UtcNow.AddDays(1).AddHours(1)
+            DurationType = EventDurationType.Standard,
+            StartTime = DateTime.UtcNow.AddDays(1)
         });
 
         var result = await _service.AddAttendeeAsync(
@@ -409,8 +437,8 @@ public class EventServiceTests : IDisposable
         var created = await _service.CreateAsync(new CreateEventRequest
         {
             Title = "Test",
-            StartTime = DateTime.UtcNow.AddDays(1),
-            EndTime = DateTime.UtcNow.AddDays(1).AddHours(1)
+            DurationType = EventDurationType.Standard,
+            StartTime = DateTime.UtcNow.AddDays(1)
         });
 
         await _service.AddAttendeeAsync(

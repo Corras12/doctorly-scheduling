@@ -13,6 +13,7 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
 
         builder.Property(e => e.Title).IsRequired().HasMaxLength(200);
         builder.Property(e => e.Description).HasMaxLength(2000);
+        builder.Property(e => e.DurationType).IsRequired();
         builder.Property(e => e.StartTime).IsRequired();
         builder.Property(e => e.EndTime).IsRequired();
         builder.Property(e => e.Location).HasMaxLength(500);
