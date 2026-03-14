@@ -20,6 +20,7 @@ public class EventsController : ApiControllerBase
     /// <summary>
     /// Creates a new calendar event with optional attendees.
     /// </summary>
+    /// <param name="request">The event details including doctor, title, duration type, and start time.</param>
     [HttpPost]
     [ProducesResponseType(typeof(EventResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -30,18 +31,19 @@ public class EventsController : ApiControllerBase
         if (!result.IsSuccess)
             return BadRequest(CreateProblem("Invalid event", result.Error!));
 
-        return CreatedAtAction(nameof(GetById), new { id = result.Value!.Id }, result.Value);
+        return CreatedAtAction(nameof(GetById), new { eventId = result.Value!.Id }, result.Value);
     }
 
     /// <summary>
     /// Gets a calendar event by ID, including all attendees.
     /// </summary>
-    [HttpGet("{id:guid}")]
+    /// <param name="eventId">The unique identifier of the event.</param>
+    [HttpGet("{eventId:guid}")]
     [ProducesResponseType(typeof(EventResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetById(Guid id)
+    public async Task<IActionResult> GetById(Guid eventId)
     {
-        var calendarEvent = await _eventService.GetByIdAsync(id);
+        var calendarEvent = await _eventService.GetByIdAsync(eventId);
 
         if (calendarEvent is null)
             return NotFound();
@@ -53,12 +55,14 @@ public class EventsController : ApiControllerBase
     /// <summary>
     /// Updates an existing calendar event. Supports optimistic concurrency via If-Match header.
     /// </summary>
-    [HttpPut("{id:guid}")]
+    /// <param name="eventId">The unique identifier of the event to update.</param>
+    /// <param name="request">The updated event details.</param>
+    [HttpPut("{eventId:guid}")]
     [ProducesResponseType(typeof(EventResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateEventRequest request)
+    public async Task<IActionResult> Update(Guid eventId, [FromBody] UpdateEventRequest request)
     {
         uint? expectedVersion = null;
         if (Request.Headers.TryGetValue("If-Match", out var etag))
@@ -68,19 +72,20 @@ public class EventsController : ApiControllerBase
                 expectedVersion = version;
         }
 
-        var result = await _eventService.UpdateAsync(id, request, expectedVersion);
+        var result = await _eventService.UpdateAsync(eventId, request, expectedVersion);
         return MapResult(result);
     }
 
     /// <summary>
     /// Permanently deletes a calendar event and all its attendees.
     /// </summary>
-    [HttpDelete("{id:guid}")]
+    /// <param name="eventId">The unique identifier of the event to delete.</param>
+    [HttpDelete("{eventId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid eventId)
     {
-        var result = await _eventService.DeleteAsync(id);
+        var result = await _eventService.DeleteAsync(eventId);
 
         if (!result.IsSuccess)
             return MapFailure(result);
@@ -91,13 +96,15 @@ public class EventsController : ApiControllerBase
     /// <summary>
     /// Cancels a calendar event without deleting it. Notifies all attendees.
     /// </summary>
-    [HttpPatch("{id:guid}/cancel")]
+    /// <param name="eventId">The unique identifier of the event to cancel.</param>
+    /// <param name="request">Optional cancellation reason.</param>
+    [HttpPatch("{eventId:guid}/cancel")]
     [ProducesResponseType(typeof(EventResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelEventRequest? request = null)
+    public async Task<IActionResult> Cancel(Guid eventId, [FromBody] CancelEventRequest? request = null)
     {
-        var result = await _eventService.CancelAsync(id, request?.Reason);
+        var result = await _eventService.CancelAsync(eventId, request?.Reason);
         return MapResult(result);
     }
 
@@ -130,17 +137,19 @@ public class EventsController : ApiControllerBase
     /// <summary>
     /// Adds an attendee to an event.
     /// </summary>
-    [HttpPost("{id:guid}/attendees")]
+    /// <param name="eventId">The unique identifier of the event.</param>
+    /// <param name="request">The attendee's name and email address.</param>
+    [HttpPost("{eventId:guid}/attendees")]
     [ProducesResponseType(typeof(AttendeeResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> AddAttendee(Guid id, [FromBody] AttendeeRequest request)
+    public async Task<IActionResult> AddAttendee(Guid eventId, [FromBody] AttendeeRequest request)
     {
-        var result = await _eventService.AddAttendeeAsync(id, request);
+        var result = await _eventService.AddAttendeeAsync(eventId, request);
 
         if (result.IsSuccess)
-            return CreatedAtAction(nameof(GetById), new { id }, result.Value);
+            return CreatedAtAction(nameof(GetById), new { eventId }, result.Value);
 
         return MapFailure(result);
     }
@@ -148,12 +157,14 @@ public class EventsController : ApiControllerBase
     /// <summary>
     /// Removes an attendee from an event.
     /// </summary>
-    [HttpDelete("{id:guid}/attendees/{attendeeId:guid}")]
+    /// <param name="eventId">The unique identifier of the event.</param>
+    /// <param name="attendeeId">The unique identifier of the attendee to remove.</param>
+    [HttpDelete("{eventId:guid}/attendees/{attendeeId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RemoveAttendee(Guid id, Guid attendeeId)
+    public async Task<IActionResult> RemoveAttendee(Guid eventId, Guid attendeeId)
     {
-        var result = await _eventService.RemoveAttendeeAsync(id, attendeeId);
+        var result = await _eventService.RemoveAttendeeAsync(eventId, attendeeId);
 
         if (!result.IsSuccess)
             return MapFailure(result);
@@ -164,13 +175,16 @@ public class EventsController : ApiControllerBase
     /// <summary>
     /// Allows an attendee to respond to an event invitation (Accept, Decline, or Tentative).
     /// </summary>
-    [HttpPatch("{id:guid}/attendees/{attendeeId:guid}/respond")]
+    /// <param name="eventId">The unique identifier of the event.</param>
+    /// <param name="attendeeId">The unique identifier of the attendee responding.</param>
+    /// <param name="request">The attendance status (1=Accepted, 2=Declined, 3=Tentative).</param>
+    [HttpPatch("{eventId:guid}/attendees/{attendeeId:guid}/respond")]
     [ProducesResponseType(typeof(AttendeeResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Respond(Guid id, Guid attendeeId, [FromBody] RespondToEventRequest request)
+    public async Task<IActionResult> Respond(Guid eventId, Guid attendeeId, [FromBody] RespondToEventRequest request)
     {
-        var result = await _eventService.RespondAsync(id, attendeeId, request.Status);
+        var result = await _eventService.RespondAsync(eventId, attendeeId, request.Status);
         return MapResult(result);
     }
 
